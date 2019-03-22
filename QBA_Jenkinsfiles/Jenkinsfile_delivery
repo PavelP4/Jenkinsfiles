@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+	environment {
+		DeliveryLocalPath = 'C:\\QBA_APP_Delivery'
+	}
+    stages {		
+		stage('RunJobs') {
+			steps {
+				echo 'Run jobs...'
+				
+				echo 'Run Mobile job...'				
+				build job: 'Mobile', parameters: [[$class: 'BooleanParameterValue', name: 'isDelivery', value: true]]	
+				
+				echo 'Run Admin job...'
+				build job: 'Admin', parameters: [[$class: 'BooleanParameterValue', name: 'isDelivery', value: true]]	
+				
+				echo 'Run Reporting job...'
+				build job: 'Reporting', parameters: [[$class: 'BooleanParameterValue', name: 'isDelivery', value: true]]
+				
+				echo 'Run Backend job...'
+				build job: 'Backend'					
+			}
+		}
+		stage('Copy') {
+			steps {			
+				echo 'Remove previous...'				
+				fileOperations([			
+							folderDeleteOperation('Mobile'),
+							folderDeleteOperation('Admin'),
+							folderDeleteOperation('Reporting'),
+							folderDeleteOperation('Backend')
+						])
+			
+				echo 'Copy new...'
+				dir("${env.DeliveryLocalPath}"){
+					fileOperations([					
+						fileCopyOperation(excludes: "", flattenFiles: false, includes: "**\\*", targetLocation: "${WORKSPACE}")
+					])				
+				}				
+			}		
+		}				
+		stage('Push') {
+			steps {				
+				echo 'Pushing.... '	
+				
+				withCredentials([usernamePassword(credentialsId: '15497a46-b5d6-4e9c-97b7-924a7a998c58', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+												
+					bat 'git config --global user.email "user@test.com"'
+					bat 'git config --global user.name "Jenkins"'
+					bat 'git config --global push.default simple'
+				
+					bat 'git add -A'					
+					bat "git commit -m 'Delivery' && git push https://${env.GIT_USERNAME}@gitblit.sam-solutions.net/r/hd-15283.git HEAD:master || echo 'It seems there is nothing to push or error happened'"											
+				}
+			}
+		}		
+    }	
+}

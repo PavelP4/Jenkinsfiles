@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+	environment {	
+		ProjectDist = 'dist'
+		DeployPath = 'C:\\QBA_APP\\Mobile'
+		DeployProdPath = 'C:\\QBA_APP\\Mobile_Prod'
+		DeliveryBuildPath = 'C:\\QBA_APP_Delivery\\Mobile\\Build'
+		DeliverySourcePath = 'C:\\QBA_APP_Delivery\\Mobile\\Source'
+	}		
+	parameters {
+        booleanParam(name: 'isDelivery', defaultValue: false, description: '')
+    }
+    stages {
+		stage('Restore node_modules') {
+			steps {
+				echo 'Restoring node_modules...'
+				
+				bat "npm install"
+			}
+		}  		
+		stage('Build&Deploy') {
+			stages {
+				stage('Prod'){
+					when{
+						equals expected: true, actual: params.isDelivery
+					}
+					steps {
+						echo 'Building prod...'					
+						bat "npm run build"
+						
+						echo 'Deploying prod...'
+						fileOperations([			
+							folderDeleteOperation(env.DeployProdPath),				
+							folderCreateOperation(env.DeployProdPath)
+						])
+						
+						dir("${WORKSPACE}\\${env.ProjectDist}"){				
+							fileOperations([					
+								fileCopyOperation(excludes: "", flattenFiles: false, includes: "**\\*", targetLocation: "${env.DeployProdPath}")
+							])
+						}
+					}
+				}
+				stage('Dev'){						
+					steps {
+						echo 'Building dev...'					
+						bat "npm run ng build"
+						
+						echo 'Deploying dev...'
+						fileOperations([			
+							folderDeleteOperation(env.DeployPath),				
+							folderCreateOperation(env.DeployPath)
+						])
+										
+						dir("${WORKSPACE}\\${env.ProjectDist}"){				
+							fileOperations([					
+								fileCopyOperation(excludes: "", flattenFiles: false, includes: "**\\*", targetLocation: "${env.DeployPath}")
+							])
+						}
+					}
+				}
+			}	
+		}				
+		stage('Delivery') {
+			when{
+				equals expected: true, actual: params.isDelivery
+			}
+			steps {
+				echo 'Copying out...'
+				
+				dir(env.DeployProdPath){				
+					fileOperations([					
+						fileCopyOperation(excludes: "", flattenFiles: false, includes: "**\\*", targetLocation: "${env.DeliveryBuildPath}")
+					])
+				}
+				
+				fileOperations([					
+					fileCopyOperation(excludes: "dist\\**, node_modules\\**", flattenFiles: false, includes: "**\\*", targetLocation: "${env.DeliverySourcePath}")
+				])
+			}
+		}		
+    }	
+}

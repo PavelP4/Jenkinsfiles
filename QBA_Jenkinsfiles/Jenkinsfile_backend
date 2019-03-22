@@ -1,0 +1,75 @@
+pipeline {
+    agent any
+	environment {
+		MSBuild = tool 'MSBuild'	
+		SourcePath = 'Source\\Nobilia.QBA.sln'
+		DeployPath = 'C:\\QBA_APP\\Backend'
+		DeliveryPath = 'C:\\QBA_APP_Delivery\\Backend'
+		DeliveryBuildPath = 'C:\\QBA_APP_Delivery\\Backend\\Build'
+		DeliverySourcePath = 'C:\\QBA_APP_Delivery\\Backend\\Source'
+		BuildConf = 'Release'
+	}	
+	/*
+	parameters {
+	}
+	*/
+	/*
+	options {
+		skipDefaultCheckout()
+	}
+	*/
+    stages {
+		stage('Restore packages') {
+			steps {
+				echo 'Restoring packages...'
+				bat "nuget restore ${env.SourcePath}"
+			}
+		} 
+ 		/*
+		stage('Remove previous') {
+			steps {
+				echo 'Removing previous...'
+			
+				//bat "IF EXIST \"${env.DeployPath}\" RD /Q /S \"${env.DeployPath}\""
+			
+				fileOperations([
+					folderDeleteOperation(env.DeployPath), 
+					folderCreateOperation(env.DeployPath)
+					])	
+			}			
+		}
+		*/
+		stage('Build&Deploy') {
+			steps {				
+			
+				echo 'Building...'	
+				
+				bat "\"${MSBuild}\" ${env.SourcePath} /p:Configuration=${env.BuildConf} /p:Platform=\"Any CPU\" /p:ProductVersion=1.0.0.${env.BUILD_NUMBER} /P:DeployOnBuild=True /P:PublishProfile=QBA_APP_Backend_Profile"								
+			}			
+		}
+		stage('Delivery') {	
+			steps {	
+				echo 'Clearing...'
+				
+				fileOperations([
+					folderDeleteOperation(env.DeliveryPath), 
+					folderCreateOperation(env.DeliveryBuildPath),
+					folderCreateOperation(env.DeliverySourcePath)
+					])	
+					
+				echo 'Copying...'
+				
+				dir(env.DeployPath){				
+					fileOperations([					
+						fileCopyOperation(excludes: "", flattenFiles: false, includes: "**\\*", targetLocation: env.DeliveryBuildPath)
+						])
+				}
+								
+				fileOperations([					
+					fileCopyOperation(excludes: "Source\\packages\\**\\*.dll, Source\\*\\bin\\**, Source\\*\\obj\\**", flattenFiles: false, includes: "**\\*", targetLocation: env.DeliverySourcePath)					
+					])
+				
+			}
+		}		
+    }	
+}
